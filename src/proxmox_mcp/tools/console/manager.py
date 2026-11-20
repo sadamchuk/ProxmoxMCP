@@ -119,20 +119,20 @@ class VMConsoleManager:
                 pid = exec_result['pid']
                 self.logger.info(f"Waiting for command completion (PID: {pid})...")
 
-                # Add a small delay to allow command to complete
+                # Poll command completion using exec-status
                 import asyncio
-                await asyncio.sleep(1)
-
-                # Get command output using exec-status
-                try:
-                    self.logger.debug(f"Getting status for PID {pid}...")
-                    console = endpoint("exec-status").get(pid=pid)
-                    self.logger.debug(f"Raw exec-status response: {console}")
-                    if not console:
-                        raise RuntimeError("No response from exec-status")
-                except Exception as e:
-                    self.logger.error(f"Failed to get command status: {str(e)}")
-                    raise RuntimeError(f"Failed to get command status: {str(e)}")
+                console = None
+                for _ in range(60):
+                    await asyncio.sleep(0.5)
+                    try:
+                        console = endpoint("exec-status").get(pid=pid)
+                        if console and console.get("exited", 0):
+                            break
+                    except Exception as e:
+                        self.logger.debug(f"Waiting for PID {pid}: {e}")
+                
+                if not console:
+                    raise RuntimeError("No response from exec-status")
                 self.logger.info(f"Command completed with status: {console}")
             except Exception as e:
                 self.logger.error(f"API call failed: {str(e)}")
